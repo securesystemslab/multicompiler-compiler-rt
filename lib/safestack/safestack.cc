@@ -15,16 +15,22 @@
 //===----------------------------------------------------------------------===//
 
 #include <limits.h>
+#include <assert.h>
 #include <pthread.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <sys/resource.h>
 #include <sys/types.h>
+#include <sys/mman.h>
 #include <sys/user.h>
 
+#if defined(__linux__)
+#include <sys/syscall.h>
+#endif
+
 #include "interception/interception.h"
-#include "sanitizer_common/sanitizer_common.h"
+//#include "sanitizer_common/sanitizer_common.h"
 
 // TODO: The runtime library does not currently protect the safe stack beyond
 // relying on the system-enforced ASLR. The protection of the (safe) stack can
@@ -92,10 +98,40 @@ static __thread void *unsafe_stack_start = nullptr;
 static __thread size_t unsafe_stack_size = 0;
 static __thread size_t unsafe_stack_guard = 0;
 
+#define ESC_XCHECKS_OFF_LOCAL (-44)
+#define ESC_XCHECKS_ON_LOCAL  (-45)
+
+#undef CHECK_GE
+#undef CHECK_EQ
+#undef CHECK_NE
+
+#define CHECK_GE(a, b) do { \
+  assert((a) >= (b)); \
+} while (0)
+
+#define CHECK_EQ(a, b) do { \
+  assert((a) == (b)); \
+} while (0)
+
+#define CHECK_NE(a, b) do { \
+  assert((a) != (b)); \
+} while (0)
+
 static inline void *unsafe_stack_alloc(size_t size, size_t guard) {
   CHECK_GE(size + guard, size);
-  void *addr = MmapOrDie(size + guard, "unsafe_stack_alloc");
-  MprotectNoAccess((uptr)addr, (uptr)guard);
+  void *addr =
+#if defined(__linux__)
+    (void*) syscall(SYS_mmap,
+#else
+    mmap(
+#endif
+              NULL, size + guard, PROT_WRITE  | PROT_READ,
+              MAP_PRIVATE | MAP_ANON
+#if defined(__linux__)
+              | MAP_STACK | MAP_GROWSDOWN
+#endif
+              , -1, 0);
+  mprotect(addr, guard, PROT_NONE);
   return (char *)addr + guard;
 }
 
@@ -113,8 +149,13 @@ static inline void unsafe_stack_setup(void *start, size_t size, size_t guard) {
 
 static void unsafe_stack_free() {
   if (unsafe_stack_start) {
-    UnmapOrDie((char *)unsafe_stack_start - unsafe_stack_guard,
-               unsafe_stack_size + unsafe_stack_guard);
+#if defined(__linux__)
+    syscall(SYS_munmap,
+#else
+    munmap(
+#endif
+      (char *)unsafe_stack_start - unsafe_stack_guard,
+      unsafe_stack_size + unsafe_stack_guard);
   }
   unsafe_stack_start = nullptr;
 }
@@ -213,6 +254,10 @@ void __safestack_init() {
   size_t size = kDefaultUnsafeStackSize;
   size_t guard = 4096;
 
+  intptr_t optout_limit = 1000;
+
+  write(ESC_XCHECKS_OFF_LOCAL, (void*) optout_limit, 0);
+
   struct rlimit limit;
   if (getrlimit(RLIMIT_STACK, &limit) == 0 && limit.rlim_cur != RLIM_INFINITY)
     size = limit.rlim_cur;
@@ -228,6 +273,8 @@ void __safestack_init() {
 
   // Setup the cleanup handler
   pthread_key_create(&thread_cleanup_key, thread_cleanup_handler);
+
+  write(ESC_XCHECKS_ON_LOCAL, NULL, 0);
 }
 
 #if SANITIZER_CAN_USE_PREINIT_ARRAY

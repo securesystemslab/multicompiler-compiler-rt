@@ -47,4 +47,20 @@ if(COMPILER_RT_BUILD_SANITIZERS)
   if(COMPILER_RT_HAS_CFI)
     add_subdirectory(cfi)
   endif()
+
+  if(COMPILER_RT_HAS_VTABLE_RANDO)
+    add_subdirectory(vtable_rando)
+  endif()
+
+  if(COMPILER_RT_HAS_PLT_RANDO)
+    add_subdirectory(plt_rando)
+  endif()
+
+  if(COMPILER_RT_HAS_DATA_RANDO)
+    add_subdirectory(data_rando)
+  endif()
+
+  if(COMPILER_RT_HAS_XCHECKS)
+    add_subdirectory(xchecks)
+  endif()
 endif()

@@ -14,8 +14,6 @@ if(APPLE)
     ARCHS ${SAFESTACK_SUPPORTED_ARCH}
     SOURCES ${SAFESTACK_SOURCES}
             $<TARGET_OBJECTS:RTInterception.osx>
-            $<TARGET_OBJECTS:RTSanitizerCommon.osx>
-            $<TARGET_OBJECTS:RTSanitizerCommonNoLibc.osx>
     CFLAGS ${SAFESTACK_CFLAGS}
     PARENT_TARGET safestack)
 else()
@@ -26,8 +24,6 @@ else()
       ARCHS ${arch}
       SOURCES ${SAFESTACK_SOURCES}
               $<TARGET_OBJECTS:RTInterception.${arch}>
-              $<TARGET_OBJECTS:RTSanitizerCommon.${arch}>
-              $<TARGET_OBJECTS:RTSanitizerCommonNoLibc.${arch}>
       CFLAGS ${SAFESTACK_CFLAGS}
       PARENT_TARGET safestack)
   endforeach()
